@@ -1,0 +1,15 @@
+<?xml version="1.0" ?>
+<!-- $Id$ -->
+<!-- 
+Build configuration script for Bakefile.
+-->
+
+<bakefile-gen xmlns="http://www.bakefile.org/schema/bakefile-gen">
+
+    <input>src/fcp/fcp.bkl</input>
+    <input>samples/fcp/nodeinfo.bkl</input>
+
+    <!-- Personal customizations (not in SVN): -->
+    <include file="Bakefiles.local.bkgen" ignore_missing="1"/>
+
+</bakefile-gen>
