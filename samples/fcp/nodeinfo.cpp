@@ -13,15 +13,19 @@
 // This application is used more for testing rather than as sample.
 // If you're looking at this file to learn how to use the wxFCP library,
 // you may better use the generated api documentation instead.
- 
-#include "wx/cmdline.h"
 
+// Overwrite defaults, less typing while testing
+// or make it fit for your envirionment
+//#define DEFAULT_FCP_PORT 9482
+//#define DEFAULT_FCP_TIMEOUT 20
 #include "wx/fcp/fcp.h"
 
 #include "wx/wxprec.h"
 #ifndef WX_PRECOMP
     #include "wx/wx.h"
 #endif
+
+#include <wx/cmdline.h>
 
 int main(int argc, char **argv)
 {
@@ -54,16 +58,26 @@ int main(int argc, char **argv)
     static const wxCmdLineEntryDesc cmdLineDesc[] =
     {
         { wxCMD_LINE_SWITCH, _T("h"), _T("help"), _T("show this help message"),
-          wxCMD_LINE_VAL_NONE, wxCMD_LINE_OPTION_HELP },
-        { wxCMD_LINE_SWITCH, _T("v"), _T("verbose"), _T("be verbose") },
+            wxCMD_LINE_VAL_NONE, wxCMD_LINE_OPTION_HELP },
+        { wxCMD_LINE_SWITCH, _T("q"), _T("quiet"), _T("be quiet (don't log fcp)") },
+        { wxCMD_LINE_OPTION, _T("o"), _T("fcphost"), _T("use given fcp host"),
+            wxCMD_LINE_VAL_STRING },
+        { wxCMD_LINE_OPTION, _T("p"), _T("fcpport"), _T("use given fcp port"),
+            wxCMD_LINE_VAL_NUMBER },
+        { wxCMD_LINE_OPTION, _T("t"), _T("fcptimeout"), _T("set connection timeout for fcp"),
+            wxCMD_LINE_VAL_NUMBER },
         { wxCMD_LINE_NONE }
     };
 
+    // init logging
+    wxLog *logger=new wxLogStream(&std::cout);
+    wxLog::SetActiveTarget(logger);
+
     wxCmdLineParser parser(cmdLineDesc, argc, wxArgv);
-    switch ( parser.Parse() )
+    switch ( parser.Parse(true) )
         {
         case -1:
-            wxLogMessage(_T("Help was given, terminating."));
+            return 0;  // Help was shown, go away.
             break;
 
         case 0:
@@ -71,11 +85,92 @@ int main(int argc, char **argv)
             break;
 
         default:
-            wxLogMessage(_T("Syntax error detected, aborting."));
+            wxLogFatalError(_T("Syntax error detected, aborting."));
             break;
     }
 
-    // do something useful here
+    wxString host;
+    if ( !parser.Found(_T("o"), &host) )
+    {
+        if ( !wxGetEnv(_T(FCP_HOST_ENV_NAME), &host) )
+        {
+            host = _T(DEFAULT_FCP_HOST);
+        }
+    }
+
+    long port;
+    if ( !parser.Found(_T("p"), &port) )
+    {
+        wxString sport;
+        if ( wxGetEnv(_T(FCP_PORT_ENV_NAME), &sport) )
+        {
+            if ( !sport.ToLong(&port) )
+            {
+                wxLogFatalError(_T("not a valid number"));
+            }
+        }
+        else
+        {
+            port = DEFAULT_FCP_PORT;
+        }
+    }
+
+    long timeout;
+    if ( !parser.Found(_T("t"), &timeout) )
+    {
+        wxString stimeout;
+        if ( wxGetEnv(_T(FCP_TIMEOUT_ENV_NAME), &stimeout) )
+        {
+            if ( !stimeout.ToLong(&timeout) )
+            {
+                wxLogFatalError(_T("not a valid number"));
+            }
+        }
+        else
+        {
+            timeout = DEFAULT_FCP_TIMEOUT;
+        }
+    }
+
+    // hack somewhat to get a first successfull hello
+
+    wxFCPConnection conn = wxFCPConnection(&host, port, timeout);
+
+    if ( !parser.Found(_T("q")) )
+    {
+        wxFCPSimpleLogger *fcplogger = new wxFCPSimpleLogger();
+        conn.setFCPLogger(fcplogger);
+    }
+
+    conn.Connect();
+
+    if (conn.IsConnected())
+	    wxLogMessage(_T("Succeeded ! FCP Connection established (helo done)"));
+    else
+    {
+	    wxLogMessage(_T("Can't connect/helo to the specified host"));
+        return 1;
+    }
+
+    conn.sendCommand(wxFCPCommandFactory::GenerateSSK());
+
+    wxFCPNodeMessage message = wxFCPNodeMessage();
+    conn.readEndMessage(message);
+
+    if ( !message.isMessageName(_T("SSKKeypair")) )
+    {
+        wxLogMessage(_T("Unexpected reply from node, generate ssk failed"));
+        return 1;
+    }
+
+    wxString readkey = message.getItem(_T("RequestURI"));
+    wxString writekey = message.getItem(_T("InsertURI"));
+
+    wxLogMessage(_T("Got a keypair from node:\n  Insert URI: %s\n Request URI: %s"), writekey.c_str(), readkey.c_str());
+
+    conn.Close(true);
+
+    wxLogMessage(_T("Socket closed. Bye"));
 
     return 0;
 }
