@@ -77,6 +77,7 @@ bool wxFCPIOConnection::readLine(wxString& line)
 {
     static const int MAX_LINE_LEN = 4096;
 
+    // TODO a too long line is a FATAL and closes the socket
     line.Empty();
 
     int n;

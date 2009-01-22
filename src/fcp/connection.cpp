@@ -66,8 +66,13 @@ bool wxFCPConnection::readEndMessage(wxFCPNodeMessage& message)
 {
     message.Clear();
 
+    // TODO a parser / format error a FATAL and closes the socket
     wxString line = wxString();
     readLine(line);
+
+    // messege name is the first line and must not contain a '='
+    // if (line.Find('=') != wxNOT_FOUND)
+
     message.setName(line);
 
     while ( true )
